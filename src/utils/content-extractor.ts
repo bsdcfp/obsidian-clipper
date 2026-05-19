@@ -45,6 +45,7 @@ function normalizeText(html: string): string {
 
 interface ContentResponse {
 	content: string;
+	contentMarkdown?: string;
 	selectedHtml: string;
 	extractedContent: ExtractedContent;
 	schemaOrgData: any;
@@ -141,7 +142,8 @@ export async function initializePageContent(
 	site: string,
 	wordCount: number,
 	language: string,
-	metaTags: { name?: string | null; property?: string | null; content: string | null }[]
+	metaTags: { name?: string | null; property?: string | null; content: string | null }[],
+	contentMarkdown?: string
 ) {
 	try {
 		currentUrl = currentUrl.replace(/#:~:text=[^&]+(&|$)/, '');
@@ -157,7 +159,7 @@ export async function initializePageContent(
 			content = processHighlights(content, highlights);
 		}
 
-		const markdownBody = createMarkdownContent(content, currentUrl);
+		const markdownBody = selectedHtml ? createMarkdownContent(content, currentUrl) : contentMarkdown || createMarkdownContent(content, currentUrl);
 
 		const highlightsData = collapseGroupsForExport(highlights, c => createMarkdownContent(c, currentUrl));
 

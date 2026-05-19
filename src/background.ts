@@ -282,6 +282,68 @@ async function sendMessageToPopup(tabId: number, message: any): Promise<void> {
 	}
 }
 
+async function extractFeishuPageData(tabId: number): Promise<any> {
+	if (!chrome?.scripting?.executeScript) {
+		throw new Error('Chrome scripting API is not available');
+	}
+
+	const [result] = await chrome.scripting.executeScript({
+		target: { tabId },
+		world: 'MAIN' as any,
+		func: () => {
+			const blockManager = (window as any).blockBasedRevisionDataService?.blockManager;
+			const root = blockManager?.getBlockModelByBlockId?.(1);
+			const rootSnapshot = root?.struct?.record?.snapshot;
+			const wikiInfo = (window as any).current_space_wiki || Object.values((window as any).wiki_info_map || {})[0] || {};
+
+			function textFromSnapshot(snapshot: any): string {
+				const text = snapshot?.text?.initialAttributedTexts?.text;
+				if (!text) return '';
+				if (typeof text === 'string') return text;
+				if (Array.isArray(text)) return text.join('');
+				if (typeof text === 'object') return Object.values(text).join('');
+				return '';
+			}
+
+			function imageUrl(snapshot: any, blockId: string): string {
+				const token = snapshot?.image?.token;
+				if (!token) return '';
+				const params = new URLSearchParams({
+					fallback_source: '1',
+					height: '1280',
+					mount_node_token: blockId,
+					mount_point: 'docx_image',
+					policy: 'equal',
+					width: '1280',
+				});
+				return `https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/v2/cover/${token}/?${params.toString()}`;
+			}
+
+			const blocks = (root?.struct?.children || []).map((child: any) => {
+				const snapshot = child?.record?.snapshot || {};
+				const id = child?.record?.id || '';
+				return {
+					id,
+					type: snapshot.type || '',
+					text: textFromSnapshot(snapshot),
+					imageUrl: imageUrl(snapshot, id),
+				};
+			});
+
+			return {
+				author: document.querySelector('.page-info .author, [class*="avatar"]')?.textContent?.trim() || '',
+				blocks,
+				objToken: wikiInfo.obj_token || root?.struct?.record?.id || '',
+				objType: wikiInfo.obj_type || 22,
+				title: document.title || textFromSnapshot(rootSnapshot),
+				wikiToken: wikiInfo.wiki_token || '',
+			};
+		},
+	});
+
+	return result?.result;
+}
+
 
 
 // Safari: route fetch through native messaging (URLSession in Swift).
@@ -307,12 +369,13 @@ async function nativeFetch(url: string, options?: any): Promise<{ ok: boolean; s
 // callers detect CORS_PERMISSION_NEEDED and prompt via permissions.request().
 browser.runtime.onMessage.addListener((request: unknown) => {
 	if (typeof request !== 'object' || request === null) return;
-	if ((request as any).action !== 'fetchProxy') return;
+	if ((request as any).action !== 'fetchProxy' && (request as any).action !== 'siteAdapterFetch') return;
 	const { url, options } = request as { url: string; options?: any };
 	const fetchOptions: RequestInit = {};
 	if (options?.method) fetchOptions.method = options.method;
 	if (options?.headers) fetchOptions.headers = options.headers;
 	if (options?.body) fetchOptions.body = options.body;
+	if (options?.credentials) fetchOptions.credentials = options.credentials;
 	return fetch(url, fetchOptions)
 		.then(async (resp) => {
 			const text = await resp.text();
@@ -649,6 +712,21 @@ browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime
 				sendResponse({ success: false, error: 'Missing tabId' });
 				return true;
 			}
+		}
+
+		if (typedRequest.action === "extractFeishuPageData") {
+			const tabId = sender.tab?.id;
+			if (!tabId) {
+				sendResponse({ success: false, error: 'Missing sender tab' });
+				return true;
+			}
+			extractFeishuPageData(tabId)
+				.then((data) => sendResponse({ success: true, data }))
+				.catch((error) => {
+					console.error('[Obsidian Clipper] extractFeishuPageData failed:', error);
+					sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
+				});
+			return true;
 		}
 
 		if (typedRequest.action === "sendMessageToTab") {

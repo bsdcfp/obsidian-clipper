@@ -12,6 +12,7 @@ import { saveFile } from './utils/file-utils';
 import { debugLog } from './utils/debug';
 import { updateSidebarWidth, addResizeHandle, cleanupResizeHandlers } from './utils/iframe-resize';
 import { parseForClip } from './utils/clip-utils';
+import { extractWithSiteAdapter } from './site-adapters';
 
 declare global {
 	interface Window {
@@ -89,6 +90,7 @@ declare global {
 
 	interface ContentResponse {
 		content: string;
+		contentMarkdown?: string;
 		selectedHtml: string;
 		extractedContent: { [key: string]: string };
 		schemaOrgData: any;
@@ -209,6 +211,37 @@ declare global {
 					const div = document.createElement('div');
 					div.appendChild(clonedSelection);
 					selectedHtml = serializeChildren(div);
+				}
+
+				const adapterResult = await extractWithSiteAdapter(document);
+				if (adapterResult) {
+					const response: ContentResponse = {
+						author: adapterResult.author || '',
+						content: adapterResult.contentHtml,
+						contentMarkdown: adapterResult.contentMarkdown,
+						description: adapterResult.description || '',
+						domain: getDomain(document.URL),
+						extractedContent: adapterResult.extractedContent || {},
+						favicon: '',
+						fullHtml: adapterResult.fullHtml,
+						highlights: highlighter.getHighlights(),
+						image: '',
+						language: adapterResult.language || '',
+						parseTime: 0,
+						published: adapterResult.published || '',
+						schemaOrgData: {},
+						selectedHtml: selectedHtml,
+						site: adapterResult.site,
+						title: adapterResult.title,
+						wordCount: adapterResult.wordCount,
+						metaTags: []
+					};
+					if (adapterResult.title) {
+						highlighter.setPageTitle(adapterResult.title);
+					}
+					highlighter.updatePageDomainSettings({ site: adapterResult.site, favicon: '' });
+					sendResponse(response);
+					return;
 				}
 
 				// Use parseAsync to ensure async variables like {{transcript}} are available.
