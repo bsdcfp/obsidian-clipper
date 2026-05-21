@@ -1,5 +1,4 @@
 import browser from '../utils/browser-polyfill';
-import { adapterFetchText } from './fetch';
 import { SiteAdapter, SiteAdapterResult } from './types';
 
 const FEISHU_HOSTS = new Set([
@@ -120,20 +119,6 @@ function blockToHtml(block: FeishuBlock): string {
 	}
 }
 
-function publicScysImageUrl(objToken: string | undefined, imageToken: string | undefined): string {
-	if (!objToken || !imageToken) return '';
-	return `https://search01.shengcaiyoushu.com/upload/doc/${encodeURIComponent(objToken)}/${encodeURIComponent(imageToken)}`;
-}
-
-async function isPublicImageAvailable(url: string): Promise<boolean> {
-	try {
-		await adapterFetchText(url, { method: 'HEAD', credentials: 'omit' });
-		return true;
-	} catch {
-		return false;
-	}
-}
-
 async function fetchImageAsDataUrl(url: string): Promise<string> {
 	const response = await browser.runtime.sendMessage({
 		action: 'fetchAuthenticatedDataUrl',
@@ -149,11 +134,6 @@ async function fetchImageAsDataUrl(url: string): Promise<string> {
 export async function resolveFeishuImages(data: FeishuPageData): Promise<FeishuPageData> {
 	const blocks = await Promise.all((data.blocks || []).map(async (block) => {
 		if (!block.imageUrl) return block;
-
-		const publicUrl = publicScysImageUrl(data.objToken, block.imageToken);
-		if (publicUrl && await isPublicImageAvailable(publicUrl)) {
-			return { ...block, imageUrl: publicUrl };
-		}
 
 		try {
 			return { ...block, imageUrl: await fetchImageAsDataUrl(block.imageUrl) };

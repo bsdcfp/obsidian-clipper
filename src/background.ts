@@ -768,7 +768,7 @@ browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime
 				.catch((error) => {
 					console.error('[Obsidian Clipper] fetchAuthenticatedDataUrl failed:', error);
 					sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
-				});
+			});
 			return true;
 		}
 
