@@ -305,9 +305,9 @@ async function extractFeishuPageData(tabId: number): Promise<any> {
 				return '';
 			}
 
-			function imageUrl(snapshot: any, blockId: string): string {
+			function imageData(snapshot: any, blockId: string): { imageToken: string; imageUrl: string } {
 				const token = snapshot?.image?.token;
-				if (!token) return '';
+				if (!token) return { imageToken: '', imageUrl: '' };
 				const params = new URLSearchParams({
 					fallback_source: '1',
 					height: '1280',
@@ -316,17 +316,22 @@ async function extractFeishuPageData(tabId: number): Promise<any> {
 					policy: 'equal',
 					width: '1280',
 				});
-				return `https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/v2/cover/${token}/?${params.toString()}`;
+				return {
+					imageToken: token,
+					imageUrl: `https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/v2/cover/${token}/?${params.toString()}`,
+				};
 			}
 
 			const blocks = (root?.struct?.children || []).map((child: any) => {
 				const snapshot = child?.record?.snapshot || {};
 				const id = child?.record?.id || '';
+				const image = imageData(snapshot, id);
 				return {
 					id,
 					type: snapshot.type || '',
 					text: textFromSnapshot(snapshot),
-					imageUrl: imageUrl(snapshot, id),
+					imageToken: image.imageToken,
+					imageUrl: image.imageUrl,
 				};
 			});
 
@@ -342,6 +347,30 @@ async function extractFeishuPageData(tabId: number): Promise<any> {
 	});
 
 	return result?.result;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+	const bytes = new Uint8Array(buffer);
+	const chunkSize = 0x8000;
+	let binary = '';
+	for (let i = 0; i < bytes.length; i += chunkSize) {
+		const chunk = bytes.subarray(i, i + chunkSize);
+		binary += String.fromCharCode(...chunk);
+	}
+	return btoa(binary);
+}
+
+async function fetchAuthenticatedDataUrl(url: string): Promise<{ dataUrl: string; mimeType: string }> {
+	const response = await fetch(url, { credentials: 'include' });
+	if (!response.ok) {
+		throw new Error(`Image fetch failed with status ${response.status}`);
+	}
+	const mimeType = response.headers.get('content-type')?.split(';')[0] || 'application/octet-stream';
+	const buffer = await response.arrayBuffer();
+	return {
+		dataUrl: `data:${mimeType};base64,${arrayBufferToBase64(buffer)}`,
+		mimeType,
+	};
 }
 
 
@@ -396,7 +425,7 @@ browser.runtime.onMessage.addListener((request: unknown) => {
 
 browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime.MessageSender, sendResponse: (response?: any) => void): true | undefined => {
 	if (typeof request === 'object' && request !== null) {
-		const typedRequest = request as { action: string; isActive?: boolean; hasHighlights?: boolean; tabId?: number; text?: string; section?: string; readerUrl?: string };
+		const typedRequest = request as { action: string; isActive?: boolean; hasHighlights?: boolean; tabId?: number; text?: string; section?: string; readerUrl?: string; url?: string };
 		
 		if (typedRequest.action === 'copy-to-clipboard' && typedRequest.text) {
 			// Use content script to copy to clipboard
@@ -724,6 +753,20 @@ browser.runtime.onMessage.addListener((request: unknown, sender: browser.Runtime
 				.then((data) => sendResponse({ success: true, data }))
 				.catch((error) => {
 					console.error('[Obsidian Clipper] extractFeishuPageData failed:', error);
+					sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
+			});
+			return true;
+		}
+
+		if (typedRequest.action === "fetchAuthenticatedDataUrl") {
+			if (!typedRequest.url) {
+				sendResponse({ success: false, error: 'Missing url' });
+				return true;
+			}
+			fetchAuthenticatedDataUrl(typedRequest.url)
+				.then((data) => sendResponse({ success: true, ...data }))
+				.catch((error) => {
+					console.error('[Obsidian Clipper] fetchAuthenticatedDataUrl failed:', error);
 					sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
 				});
 			return true;
