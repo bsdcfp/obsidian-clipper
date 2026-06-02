@@ -7,6 +7,7 @@ const FEISHU_HOSTS = new Set([
 ]);
 
 interface FeishuBlock {
+	depth?: number;
 	id: string;
 	imageToken?: string;
 	imageUrl?: string;
@@ -57,9 +58,10 @@ function escapeHtml(value: string): string {
 
 function blockToMarkdown(block: FeishuBlock): string {
 	const text = cleanText(block.text || '');
+	const indent = '  '.repeat(Math.max(0, block.depth || 0));
 
 	if (block.imageUrl) {
-		return `![](${block.imageUrl})`;
+		return `${indent}![](${block.imageUrl})`;
 	}
 
 	if (!text) return '';
@@ -78,10 +80,10 @@ function blockToMarkdown(block: FeishuBlock): string {
 			return `###### ${text}`;
 		case 'bullet':
 		case 'bulletList':
-			return `- ${text}`;
+			return `${indent}- ${text}`;
 		case 'ordered':
 		case 'orderedList':
-			return `1. ${text}`;
+			return `${indent}1. ${text}`;
 		default:
 			return text;
 	}

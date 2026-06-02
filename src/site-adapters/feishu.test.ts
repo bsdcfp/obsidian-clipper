@@ -10,6 +10,7 @@ describe('feishu adapter rendering', () => {
 				{ id: 'a', type: 'text', text: '正文第一段' },
 				{ id: 'b', type: 'heading1', text: '我的投资编年史' },
 				{ id: 'c', type: 'image', imageUrl: 'https://example.com/image.png' },
+				{ id: 'd', depth: 1, type: 'bullet', text: '嵌套要点' },
 			],
 		};
 
@@ -19,6 +20,7 @@ describe('feishu adapter rendering', () => {
 		expect(markdown).toContain('正文第一段');
 		expect(markdown).toContain('## 我的投资编年史');
 		expect(markdown).toContain('![](https://example.com/image.png)');
+		expect(markdown).toContain('  - 嵌套要点');
 
 		const html = feishuToHtml(data);
 		expect(html).toContain('data-site-adapter="feishu"');

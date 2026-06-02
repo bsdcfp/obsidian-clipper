@@ -322,18 +322,25 @@ async function extractFeishuPageData(tabId: number): Promise<any> {
 				};
 			}
 
-			const blocks = (root?.struct?.children || []).map((child: any) => {
-				const snapshot = child?.record?.snapshot || {};
-				const id = child?.record?.id || '';
+			function childrenOf(block: any): any[] {
+				return block?.children || block?.struct?.children || [];
+			}
+
+			function blockToData(block: any, depth: number): any[] {
+				const snapshot = block?.record?.snapshot || {};
+				const id = block?.record?.id || '';
 				const image = imageData(snapshot, id);
-				return {
+				return [{
+					depth,
 					id,
 					type: snapshot.type || '',
 					text: textFromSnapshot(snapshot),
 					imageToken: image.imageToken,
 					imageUrl: image.imageUrl,
-				};
-			});
+				}, ...childrenOf(block).flatMap((child: any) => blockToData(child, depth + 1))];
+			}
+
+			const blocks = (root?.struct?.children || []).flatMap((child: any) => blockToData(child, 0));
 
 			return {
 				author: document.querySelector('.page-info .author, [class*="avatar"]')?.textContent?.trim() || '',
