@@ -306,6 +306,13 @@ async function extractFeishuPageData(tabId: number): Promise<any> {
 			}
 
 			function imageData(snapshot: any, blockId: string): { imageToken: string; imageUrl: string } {
+				if (snapshot?.type === 'whiteboard' && snapshot?.token) {
+					const token = snapshot.token;
+					return {
+						imageToken: token,
+						imageUrl: `https://my.feishu.cn/space/api/file/f/cdp-whiteboard-${token}~noop/`,
+					};
+				}
 				const token = snapshot?.image?.token;
 				if (!token) return { imageToken: '', imageUrl: '' };
 				const params = new URLSearchParams({
@@ -367,13 +374,32 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 	return btoa(binary);
 }
 
+function detectImageMimeType(buffer: ArrayBuffer, fallback: string): string {
+	const bytes = new Uint8Array(buffer);
+	if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+		return 'image/png';
+	}
+	if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+		return 'image/jpeg';
+	}
+	if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+		return 'image/gif';
+	}
+	if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+		&& bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
+		return 'image/webp';
+	}
+	return fallback;
+}
+
 async function fetchAuthenticatedDataUrl(url: string): Promise<{ dataUrl: string; mimeType: string }> {
 	const response = await fetch(url, { credentials: 'include' });
 	if (!response.ok) {
 		throw new Error(`Image fetch failed with status ${response.status}`);
 	}
-	const mimeType = response.headers.get('content-type')?.split(';')[0] || 'application/octet-stream';
 	const buffer = await response.arrayBuffer();
+	const headerMimeType = response.headers.get('content-type')?.split(';')[0] || 'application/octet-stream';
+	const mimeType = detectImageMimeType(buffer, headerMimeType);
 	return {
 		dataUrl: `data:${mimeType};base64,${arrayBufferToBase64(buffer)}`,
 		mimeType,

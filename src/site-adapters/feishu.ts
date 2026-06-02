@@ -61,7 +61,7 @@ function blockToMarkdown(block: FeishuBlock): string {
 	const indent = '  '.repeat(Math.max(0, block.depth || 0));
 
 	if (block.imageUrl) {
-		return `${indent}![](${block.imageUrl})`;
+		return `![](${block.imageUrl})`;
 	}
 
 	if (!text) return '';
